@@ -10,11 +10,15 @@ const PORT = process.env.PORT || 4000;
   try {
     await sequelize.authenticate();
     console.log("Conexión a MySQL establecida correctamente");
-    app.listen(PORT, () => {
-      console.log(`Servidor corriendo en http://localhost:${PORT}`);
-    });
+    if (process.env.VERCEL !== "1") {
+      app.listen(PORT, () => {
+        console.log(`Servidor corriendo en http://localhost:${PORT}`);
+      });
+    }
   } catch (err) {
     console.error("No se pudo conectar a MySQL:", err.message);
-    process.exit(1);
+    if (process.env.VERCEL !== "1") {
+      process.exit(1);
+    }
   }
 })();
