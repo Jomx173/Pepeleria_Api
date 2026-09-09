@@ -17,6 +17,10 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+app.get("/", (req, res) => {
+  res.json({ service: "pepeleria-api", status: "ok", endpoints: ["/api/health", "/api/categories", "/api/products", "/api/movements", "/api/reports", "/api/backup"] });
+});
+
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/movements", movementRoutes);
