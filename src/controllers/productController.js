@@ -1,6 +1,8 @@
 const { Op, Sequelize } = require("sequelize");
+const sequelize = require("../config/database");
 const Product = require("../models/Product");
 const Category = require("../models/Category");
+const Movement = require("../models/Movement");
 const generateProductCode = require("../utils/generateProductCode");
 
 const getEstado = (cantidad, stockMinimo) => {
@@ -14,7 +16,6 @@ const serializeProduct = (product) => {
   const estado = getEstado(p.cantidad, p.stock_minimo);
   return {
     id: p.id,
-    codigo: p.codigo,
     nombre: p.nombre,
     cantidad: p.cantidad,
     stock_minimo: p.stock_minimo,
@@ -80,11 +81,16 @@ const validateProductData = (body) => {
   if (cantidad === undefined || cantidad === null || typeof cantidad !== "number" || !Number.isInteger(cantidad) || cantidad < 0) {
     return { error: "El campo 'cantidad' debe ser un número entero no negativo" };
   }
-  if (precio === undefined || precio === null || typeof precio !== "number" || isNaN(precio) || precio < 0) {
-    return { error: "El campo 'precio' debe ser un número no negativo" };
+  if (precio === undefined || precio === null || typeof precio !== "number" || isNaN(precio) || precio <= 0) {
+    return { error: "El campo 'precio' debe ser un número mayor a 0" };
   }
-  if (categoria_id !== undefined && categoria_id !== null && categoria_id !== "" && (typeof categoria_id !== "number" || !Number.isInteger(categoria_id))) {
-    return { error: "El campo 'categoria_id' debe ser un número entero" };
+  if (
+    categoria_id === undefined ||
+    categoria_id === null ||
+    typeof categoria_id !== "number" ||
+    !Number.isInteger(categoria_id)
+  ) {
+    return { error: "El campo 'categoria_id' es obligatorio" };
   }
   if (
     stock_minimo !== undefined &&
@@ -99,33 +105,47 @@ const validateProductData = (body) => {
       nombre: nombre.trim(),
       cantidad,
       precio,
-      categoria_id: categoria_id === "" ? null : categoria_id,
+      categoria_id,
       stock_minimo: stock_minimo === undefined || stock_minimo === null ? 5 : stock_minimo,
     },
   };
 };
 
 const createProduct = async (req, res) => {
+  let t;
   try {
     const { error, data } = validateProductData(req.body);
     if (error) {
       return res.status(400).json({ message: error });
     }
     const codigo = await generateProductCode(data.categoria_id);
-    const product = await Product.create({ ...data, codigo });
+    t = await sequelize.transaction();
+    const product = await Product.create({ ...data, codigo }, { transaction: t });
+    if (data.cantidad > 0) {
+      await Movement.create(
+        {
+          producto_id: product.id,
+          tipo: "entrada",
+          cantidad: data.cantidad,
+          motivo: "Inventario inicial",
+        },
+        { transaction: t }
+      );
+    }
+    await t.commit();
     const estado = getEstado(data.cantidad, data.stock_minimo);
     res.status(201).json({
       id: product.id,
-      codigo: product.codigo,
       nombre: data.nombre,
       cantidad: data.cantidad,
       stock_minimo: data.stock_minimo,
       estado,
       stockBajo: estado !== "en_stock",
       precio: data.precio,
-      categoria_id: data.categoria_id ?? null,
+      categoria_id: data.categoria_id,
     });
   } catch (err) {
+    if (t) await t.rollback().catch(() => {});
     if (err.name === "SequelizeForeignKeyConstraintError") {
       return res.status(400).json({ message: "La categoría indicada no existe" });
     }
