@@ -26,6 +26,14 @@ const Movement = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
     },
+    stock_anterior: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    stock_actual: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
     motivo: {
       type: DataTypes.STRING,
       allowNull: true,

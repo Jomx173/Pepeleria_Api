@@ -2,6 +2,7 @@ require("dotenv").config();
 require("mysql2");
 const express = require("express");
 const cors = require("cors");
+const { ensureMovementSchema } = require("./config/migrations");
 const categoryRoutes = require("./routes/categoryRoutes");
 const productRoutes = require("./routes/productRoutes");
 const movementRoutes = require("./routes/movementRoutes");
@@ -12,6 +13,15 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+app.use(async (req, res, next) => {
+  try {
+    await ensureMovementSchema();
+  } catch (e) {
+    // la migración ya registró el error; no bloqueamos la petición
+  }
+  next();
+});
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });

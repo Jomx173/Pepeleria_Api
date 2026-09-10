@@ -7,7 +7,7 @@ const generateProductCode = require("../utils/generateProductCode");
 
 const getEstado = (cantidad, stockMinimo) => {
   if (cantidad === 0) return "agotado";
-  if (cantidad < stockMinimo) return "stock_bajo";
+  if (cantidad <= stockMinimo) return "stock_bajo";
   return "en_stock";
 };
 
@@ -26,7 +26,7 @@ const serializeProduct = (product) => {
     created_at: p.created_at,
     updated_at: p.updated_at,
     categoria: p.category ? p.category.nombre : null,
-    stockBajo: p.cantidad < 5,
+    stockBajo: estado !== "en_stock",
   };
 };
 
@@ -127,6 +127,8 @@ const createProduct = async (req, res) => {
           producto_id: product.id,
           tipo: "entrada",
           cantidad: data.cantidad,
+          stock_anterior: 0,
+          stock_actual: data.cantidad,
           motivo: "Inventario inicial",
         },
         { transaction: t }
@@ -175,14 +177,20 @@ const updateProduct = async (req, res) => {
 };
 
 const deleteProduct = async (req, res) => {
+  const t = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const affectedRows = await Product.destroy({ where: { id } });
-    if (affectedRows === 0) {
+    const product = await Product.findByPk(id, { transaction: t });
+    if (!product) {
+      await t.rollback();
       return res.status(404).json({ message: "Producto no encontrado" });
     }
+    await Movement.destroy({ where: { producto_id: id }, transaction: t });
+    await product.destroy({ transaction: t });
+    await t.commit();
     res.status(200).json({ message: "Producto eliminado" });
   } catch (err) {
+    await t.rollback();
     res.status(500).json({ message: "Error al eliminar el producto", error: err.message });
   }
 };

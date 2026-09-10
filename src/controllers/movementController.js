@@ -10,6 +10,8 @@ const serializeMovement = (movement) => {
     producto_id: m.producto_id,
     tipo: m.tipo,
     cantidad: m.cantidad,
+    stock_anterior: m.stock_anterior ?? null,
+    stock_actual: m.stock_actual ?? null,
     motivo: m.motivo ?? null,
     created_at: m.created_at,
     producto: m.product ? m.product.nombre : null,
@@ -93,6 +95,8 @@ const createMovement = async (req, res) => {
         producto_id,
         tipo,
         cantidad,
+        stock_anterior: product.cantidad,
+        stock_actual: tipo === "entrada" ? product.cantidad + cantidad : product.cantidad - cantidad,
         motivo: motivo ?? null,
       },
       { transaction: t }
@@ -177,6 +181,8 @@ const updateMovement = async (req, res) => {
       }
       product.cantidad = nuevoStock;
       await product.save({ transaction: t });
+      movement.stock_anterior = nuevoStock - newEfecto;
+      movement.stock_actual = nuevoStock;
     } else {
       const oldProduct = prodMap.get(oldProductoId);
       const oldStock = oldProduct.cantidad - oldEfecto;
@@ -195,8 +201,10 @@ const updateMovement = async (req, res) => {
           message: `Stock insuficiente en el nuevo producto (disponible: ${newProduct.cantidad})`,
         });
       }
+      movement.stock_anterior = newProduct.cantidad;
       newProduct.cantidad = newStock;
       await newProduct.save({ transaction: t });
+      movement.stock_actual = newProduct.cantidad;
     }
 
     movement.tipo = newTipo;

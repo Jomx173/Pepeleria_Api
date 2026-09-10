@@ -1,4 +1,5 @@
 const sequelize = require("./src/config/database");
+const { ensureMovementSchema } = require("./src/config/migrations");
 require("./src/models/Category");
 require("./src/models/Product");
 require("./src/models/Movement");
@@ -10,6 +11,8 @@ const PORT = process.env.PORT || 4000;
   try {
     await sequelize.authenticate();
     console.log("Conexión a MySQL establecida correctamente");
+    await ensureMovementSchema();
+    console.log("Esquema de movimientos verificado");
     if (process.env.VERCEL !== "1") {
       app.listen(PORT, () => {
         console.log(`Servidor corriendo en http://localhost:${PORT}`);
