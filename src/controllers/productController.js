@@ -195,6 +195,115 @@ const deleteProduct = async (req, res) => {
   }
 };
 
+const adjustProductsStock = async (req, res) => {
+  const { items, motivo } = req.body;
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ message: "Debes indicar al menos un producto para ajustar" });
+  }
+  if (motivo !== undefined && motivo !== null && typeof motivo !== "string") {
+    return res.status(400).json({ message: "El campo 'motivo' debe ser un texto" });
+  }
+
+  const validTipos = ["aumentar", "disminuir", "establecer"];
+  for (const item of items) {
+    if (
+      item.producto_id === undefined ||
+      item.producto_id === null ||
+      typeof item.producto_id !== "number" ||
+      !Number.isInteger(item.producto_id) ||
+      item.producto_id <= 0
+    ) {
+      return res.status(400).json({ message: "Cada producto debe incluir un 'producto_id' válido" });
+    }
+    if (!validTipos.includes(item.tipo)) {
+      return res.status(400).json({ message: "El campo 'tipo' debe ser 'aumentar', 'disminuir' o 'establecer'" });
+    }
+    if (
+      item.cantidad === undefined ||
+      item.cantidad === null ||
+      typeof item.cantidad !== "number" ||
+      !Number.isInteger(item.cantidad) ||
+      item.cantidad < 0 ||
+      (item.tipo !== "establecer" && item.cantidad <= 0)
+    ) {
+      return res.status(400).json({
+        message:
+          item.tipo === "establecer"
+            ? "La cantidad a establecer debe ser un número entero no negativo"
+            : "La cantidad debe ser un número entero mayor a 0",
+      });
+    }
+  }
+
+  const t = await sequelize.transaction();
+  try {
+    const ajustados = [];
+    for (const item of items) {
+      const product = await Product.findByPk(item.producto_id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+        include: [withCategory],
+      });
+      if (!product) {
+        await t.rollback();
+        return res.status(400).json({ message: "Alguno de los productos seleccionados no existe" });
+      }
+
+      const stockAnterior = product.cantidad;
+      let cantidad = 0;
+      if (item.tipo === "aumentar") {
+        cantidad = item.cantidad;
+      } else if (item.tipo === "disminuir") {
+        cantidad = -item.cantidad;
+      } else {
+        cantidad = item.cantidad - stockAnterior;
+      }
+
+      const nuevoStock = stockAnterior + cantidad;
+      if (nuevoStock < 0) {
+        await t.rollback();
+        return res.status(400).json({
+          message: "No se puede disminuir esa cantidad porque el stock resultaría negativo.",
+        });
+      }
+
+      const movement = await Movement.create(
+        {
+          producto_id: product.id,
+          tipo: "ajuste",
+          cantidad,
+          stock_anterior: stockAnterior,
+          stock_actual: nuevoStock,
+          motivo: motivo ?? "Ajuste de inventario",
+        },
+        { transaction: t }
+      );
+
+      product.cantidad = nuevoStock;
+      await product.save({ transaction: t });
+
+      ajustados.push({ producto: serializeProduct(product), movimiento: movement.toJSON() });
+    }
+
+    await t.commit();
+    res.status(200).json({
+      message: `Stock ajustado correctamente en ${ajustados.length} producto${ajustados.length === 1 ? "" : "s"}`,
+      productos: ajustados.map((a) => a.producto),
+      ajustes: ajustados.map((a) => ({
+        producto_id: a.producto.id,
+        cantidad: a.movimiento.cantidad,
+        stock_anterior: a.movimiento.stock_anterior,
+        stock_actual: a.movimiento.stock_actual,
+        estado: a.producto.estado,
+      })),
+    });
+  } catch (err) {
+    await t.rollback();
+    res.status(500).json({ message: "Error al ajustar el stock", error: err.message });
+  }
+};
+
 module.exports = {
   getProducts,
   getProduct,
@@ -202,4 +311,5 @@ module.exports = {
   createProduct,
   updateProduct,
   deleteProduct,
+  adjustProductsStock,
 };

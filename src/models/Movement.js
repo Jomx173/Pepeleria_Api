@@ -19,7 +19,7 @@ const Movement = sequelize.define(
       },
     },
     tipo: {
-      type: DataTypes.ENUM("entrada", "salida"),
+      type: DataTypes.ENUM("entrada", "salida", "ajuste"),
       allowNull: false,
     },
     cantidad: {

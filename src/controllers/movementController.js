@@ -34,7 +34,7 @@ const serializeProduct = (product) => {
 };
 
 const efecto = (tipo, cantidad) =>
-  tipo === "entrada" ? cantidad : -cantidad;
+  tipo === "entrada" ? cantidad : tipo === "salida" ? -cantidad : Number(cantidad);
 
 const isValidId = (id) => Number.isInteger(id) && id > 0;
 
